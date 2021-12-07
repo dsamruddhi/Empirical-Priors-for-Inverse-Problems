@@ -1,6 +1,8 @@
 from abc import ABC
+import os
 import numpy as np
 import tensorflow as tf
+from datetime import datetime
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Dense, Conv2D, Activation, BatchNormalization, Input, MaxPooling2D
@@ -27,7 +29,7 @@ class AdversarialRegularizer(BaseModel, ABC):
         self.model = None
         self.optimizer = None
 
-        self.reg_lambda = 20
+        self.reg_lambda = 30
 
         # Training
         self.steps = Config.config["train"]["steps"]
@@ -88,6 +90,12 @@ class AdversarialRegularizer(BaseModel, ABC):
         self.model = _create_model()
         self.optimizer = tf.keras.optimizers.RMSprop(learning_rate=0.00005)
 
+    def log(self):
+        log_dir = os.path.join(Config.config["model"]["model_path"], "logs")
+        self.summary_writer = tf.summary.create_file_writer(os.path.join(log_dir,
+                                                                         Config.config['model']['experiment_name'],
+                                                                         datetime.now().strftime("%Y%m%d-%H%M%S")))
+
     def train_regularizer(self, steps):
 
         alpha = tf.random.normal([self.batch_size, 1, 1, 1], 0.0, 1.0)
@@ -105,6 +113,8 @@ class AdversarialRegularizer(BaseModel, ABC):
         train_ds = self.train_dataset.repeat(5).as_numpy_iterator()
 
         for step in tf.range(steps):
+            step = tf.cast(step, tf.int64)
+
             gen_batch, real_batch, _ = train_ds.next()
             gen_batch = gen_batch[..., np.newaxis]
             real_batch = real_batch[..., np.newaxis]
@@ -121,6 +131,12 @@ class AdversarialRegularizer(BaseModel, ABC):
 
             network_gradients = critic_tape.gradient(total_loss, self.model.trainable_variables)
             self.optimizer.apply_gradients(zip(network_gradients, self.model.trainable_variables))
+
+            with self.summary_writer.as_default():
+                tf.summary.scalar('critic_loss', critic_loss, step=step)
+                tf.summary.scalar('gradient_penalty', gp, step=step)
+                tf.summary.scalar('reg_parameter', self.reg_lambda, step=step)
+                tf.summary.scalar('total_loss', total_loss, step=step)
 
     def evaluate(self):
         pass
@@ -141,4 +157,5 @@ if __name__ == '__main__':
     experiment = AdversarialRegularizer()
     experiment.load_data(show_data=False)
     experiment.build()
-    experiment.train_regularizer(100)
+    experiment.log()
+    experiment.train_regularizer(200)
