@@ -73,3 +73,9 @@ class Load:
         total_powers = Load.get_total_power()
         measurements = [_get_rytov_data(power, direct_power) for power in total_powers]
         return measurements
+
+    @staticmethod
+    def get_rytov_model():
+        A = loadmat(r"C:\Users\dsamr\OneDrive - HKUST Connect\MPHIL RESEARCH\PROJECTS\Empirical-Priors-for-Inverse-Problems\dataloader\A_imag.mat")
+        A = A["A_imag"]
+        return A

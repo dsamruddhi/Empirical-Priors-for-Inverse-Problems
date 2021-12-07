@@ -30,6 +30,7 @@ class AdversarialRegularizer(BaseModel, ABC):
         self.optimizer = None
 
         self.reg_lambda = 30
+        self.mu = 0.7
 
         # Training
         self.steps = Config.config["train"]["steps"]
@@ -48,6 +49,8 @@ class AdversarialRegularizer(BaseModel, ABC):
 
         self.train_dataset = train_dataset.batch(self.batch_size, drop_remainder=True)
         self.test_dataset = test_dataset.batch(self.batch_size, drop_remainder=True)
+
+        self.A = DataLoader.rytov_model()
 
     def build(self):
 
@@ -138,8 +141,32 @@ class AdversarialRegularizer(BaseModel, ABC):
                 tf.summary.scalar('reg_parameter', self.reg_lambda, step=step)
                 tf.summary.scalar('total_loss', total_loss, step=step)
 
-    def evaluate(self):
-        pass
+    def evaluate(self, steps, step_size):
+
+        for (gen_data, real_data, measurements) in self.train_dataset.take(1):
+
+            for step in tf.range(steps):
+                step = tf.cast(step, tf.int64)
+
+                xg = np.copy(gen_data[1, :, :])
+                xr = real_data[1, :, :]
+                y = measurements[1, :]
+
+                data_mismatch = tf.square(y - (self.A @ tf.reshape(tf.transpose(xg), shape=[2500, 1]))[:, 0])
+                data_loss = tf.reduce_mean(data_mismatch)
+                data_loss = tf.cast(data_loss, dtype=tf.float32)
+
+                with tf.GradientTape() as eval_tape:
+                    eval_tape.watch(gen_data)
+                    critic_output = tf.reduce_mean(self.model(gen_data))
+                    total_loss = data_loss + self.mu * critic_output
+
+                    eval_gradients = eval_tape.gradient(total_loss*self.batch_size, gen_data)[0]
+                gen_data = gen_data - step_size * eval_gradients
+
+                print(step, total_loss)
+
+            break
 
 
 if __name__ == '__main__':
@@ -158,4 +185,5 @@ if __name__ == '__main__':
     experiment.load_data(show_data=False)
     experiment.build()
     experiment.log()
-    experiment.train_regularizer(200)
+    experiment.train_regularizer(50)
+    experiment.evaluate(30, 1)
