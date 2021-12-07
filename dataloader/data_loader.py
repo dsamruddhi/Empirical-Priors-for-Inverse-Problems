@@ -61,6 +61,10 @@ class DataLoader:
 
         return gen_data_train, gen_data_test, real_data_train, real_data_test, measurements_train, measurements_test
 
+    @staticmethod
+    def rytov_model():
+        return Load.get_rytov_model()
+
 
 if __name__ == '__main__':
 
