@@ -10,7 +10,7 @@ from tensorflow.keras.layers import Dense, Conv2D, Activation, BatchNormalizatio
 from config import Config
 from base_model import BaseModel
 from dataloader.data_loader import DataLoader
-
+from utils.plot_utils import PlotUtils
 
 class AdversarialRegularizer(BaseModel, ABC):
 
@@ -145,26 +145,29 @@ class AdversarialRegularizer(BaseModel, ABC):
 
         for (gen_data, real_data, measurements) in self.train_dataset.take(1):
 
+            xg = np.copy(gen_data[1, :, :])
+            xg = tf.convert_to_tensor(xg[np.newaxis, ..., np.newaxis])
+            xr = real_data[1, :, :]
+            y = measurements[1, :]
+
             for step in tf.range(steps):
                 step = tf.cast(step, tf.int64)
-
-                xg = np.copy(gen_data[1, :, :])
-                xr = real_data[1, :, :]
-                y = measurements[1, :]
 
                 data_mismatch = tf.square(y - (self.A @ tf.reshape(tf.transpose(xg), shape=[2500, 1]))[:, 0])
                 data_loss = tf.reduce_mean(data_mismatch)
                 data_loss = tf.cast(data_loss, dtype=tf.float32)
 
                 with tf.GradientTape() as eval_tape:
-                    eval_tape.watch(gen_data)
-                    critic_output = tf.reduce_mean(self.model(gen_data))
+                    eval_tape.watch(xg)
+                    critic_output = tf.reduce_mean(self.model(xg))
                     total_loss = data_loss + self.mu * critic_output
 
-                    eval_gradients = eval_tape.gradient(total_loss*self.batch_size, gen_data)[0]
-                gen_data = gen_data - step_size * eval_gradients
+                    eval_gradients = eval_tape.gradient(total_loss*self.batch_size, xg)[0]
+                xg = xg - step_size * eval_gradients
 
                 print(step, total_loss)
+
+            PlotUtils.plot_output(gen_data[1, :, :], xg)
 
             break
 
@@ -185,5 +188,5 @@ if __name__ == '__main__':
     experiment.load_data(show_data=False)
     experiment.build()
     experiment.log()
-    experiment.train_regularizer(50)
-    experiment.evaluate(30, 1)
+    experiment.train_regularizer(100)
+    experiment.evaluate(50, 0.7)
