@@ -30,7 +30,7 @@ class AdversarialRegularizer(BaseModel, ABC):
         self.optimizer = None
 
         self.reg_lambda = 30
-        self.mu = 0.7
+        self.mu = 0.5
 
         # Training
         self.steps = Config.config["train"]["steps"]
@@ -141,14 +141,14 @@ class AdversarialRegularizer(BaseModel, ABC):
                 tf.summary.scalar('reg_parameter', self.reg_lambda, step=step)
                 tf.summary.scalar('total_loss', total_loss, step=step)
 
-    def evaluate(self, steps, step_size):
+    def evaluate(self, sample_index, steps, step_size):
 
         for (gen_data, real_data, measurements) in self.train_dataset.take(1):
 
-            xg = np.copy(gen_data[1, :, :])
+            xg = np.copy(gen_data[sample_index, :, :])
             xg = tf.convert_to_tensor(xg[np.newaxis, ..., np.newaxis])
-            xr = real_data[1, :, :]
-            y = measurements[1, :]
+            xr = real_data[sample_index, :, :]
+            y = measurements[sample_index, :]
 
             for step in tf.range(steps):
                 step = tf.cast(step, tf.int64)
@@ -167,7 +167,7 @@ class AdversarialRegularizer(BaseModel, ABC):
 
                 print(step, total_loss)
 
-            PlotUtils.plot_output(gen_data[1, :, :], xg)
+            PlotUtils.plot_output(gen_data[sample_index, :, :], xg)
 
             break
 
@@ -189,4 +189,5 @@ if __name__ == '__main__':
     experiment.build()
     experiment.log()
     experiment.train_regularizer(100)
-    experiment.evaluate(50, 0.7)
+    sample_index = 5
+    experiment.evaluate(sample_index, 100, 2)
