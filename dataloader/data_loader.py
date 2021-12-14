@@ -35,6 +35,14 @@ class DataLoader:
 
             plt.show()
 
+    def load_denoising(self, show_data):
+        real_data = Load.get_real_data()
+        real_data = np.asarray(real_data)
+
+        real_data_train, real_data_test = Process.split_data(real_data, self.test_size)
+
+        return real_data_train, real_data_test
+
     def main(self, show_data):
 
         X_real, X_imag = Load.get_generated_data()
