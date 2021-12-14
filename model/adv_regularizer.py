@@ -5,12 +5,13 @@ import tensorflow as tf
 from datetime import datetime
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, Conv2D, Activation, BatchNormalization, Input, MaxPooling2D
+from tensorflow.keras.layers import Dense, Conv2D, Activation, BatchNormalization, Input, MaxPooling2D, Flatten
 
 from config import Config
 from base_model import BaseModel
 from dataloader.data_loader import DataLoader
 from utils.plot_utils import PlotUtils
+
 
 class AdversarialRegularizer(BaseModel, ABC):
 
@@ -29,7 +30,7 @@ class AdversarialRegularizer(BaseModel, ABC):
         self.model = None
         self.optimizer = None
 
-        self.reg_lambda = 30
+        self.reg_lambda = 10
         self.mu = 0.5
 
         # Training
@@ -84,14 +85,16 @@ class AdversarialRegularizer(BaseModel, ABC):
             conv4 = _one_cnn_layer(conv4, 512, 3, "SAME")
 
             """ Final layer """
-            conv10 = Dense(1)(conv4)
-            conv10 = Activation(_leaky_relu)(conv10)
+            # conv10 = Dense(1)(conv4)
+            # output_layer = Activation(_leaky_relu)(conv10)
+            f = Flatten()(conv4)
+            output_layer = tf.keras.layers.Dense(1, activation=_leaky_relu)(f)
 
-            model = Model(inputs=input_layer, outputs=conv10)
+            model = Model(inputs=input_layer, outputs=output_layer)
             return model
 
         self.model = _create_model()
-        self.optimizer = tf.keras.optimizers.RMSprop(learning_rate=0.00005)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.0000005)
 
     def log(self):
         log_dir = os.path.join(Config.config["model"]["model_path"], "logs")
@@ -101,10 +104,9 @@ class AdversarialRegularizer(BaseModel, ABC):
 
     def train_regularizer(self, steps):
 
-        alpha = tf.random.normal([self.batch_size, 1, 1, 1], 0.0, 1.0)
-
         def _gradient_penalty(gen_images, real_images):
-            interpolated = alpha * gen_images + real_images * (1 - alpha)
+            alpha = tf.random.normal([self.batch_size, 1, 1, 1], 0.0, 1.0)
+            interpolated = tf.multiply(gen_images, alpha) + tf.multiply(real_images, 1-alpha)
             with tf.GradientTape() as gp_tape:
                 gp_tape.watch(interpolated)
                 pred = self.model(interpolated, training=True)
@@ -153,19 +155,21 @@ class AdversarialRegularizer(BaseModel, ABC):
             for step in tf.range(steps):
                 step = tf.cast(step, tf.int64)
 
-                data_mismatch = tf.square(y - (self.A @ tf.reshape(tf.transpose(xg), shape=[2500, 1]))[:, 0])
-                data_loss = tf.reduce_mean(data_mismatch)
-                data_loss = tf.cast(data_loss, dtype=tf.float32)
-
                 with tf.GradientTape() as eval_tape:
                     eval_tape.watch(xg)
+
+                    data_mismatch = tf.square(y - (self.A @ tf.reshape(tf.transpose(xg), shape=[2500, 1]))[:, 0])
+                    data_loss = tf.reduce_mean(data_mismatch)
+                    data_loss = tf.cast(data_loss, dtype=tf.float32)
+
                     critic_output = tf.reduce_mean(self.model(xg))
                     total_loss = data_loss + self.mu * critic_output
+                    total_loss = tf.multiply(total_loss, self.batch_size)
 
-                    eval_gradients = eval_tape.gradient(total_loss*self.batch_size, xg)[0]
-                xg = xg - step_size * eval_gradients
+                    print(step, data_loss, critic_output)
 
-                print(step, total_loss)
+                eval_gradients = eval_tape.gradient(total_loss, xg)[0]
+                xg = xg - (step_size * eval_gradients)
 
             PlotUtils.plot_output(gen_data[sample_index, :, :], xg)
 
@@ -188,6 +192,15 @@ if __name__ == '__main__':
     experiment.load_data(show_data=False)
     experiment.build()
     experiment.log()
-    experiment.train_regularizer(100)
-    sample_index = 5
-    experiment.evaluate(sample_index, 100, 2)
+    experiment.train_regularizer(200)
+
+    ind = 5
+    for (gen_data, real_data, measurements) in experiment.train_dataset.take(1):
+        output1 = experiment.model(gen_data[ind:ind+1, :, :])
+        output2 = experiment.model(real_data[ind:ind+1, :, :])
+        print("real data outputs: ", tf.reduce_mean(output2))
+        print("gen data outputs: ", tf.reduce_mean(output1))
+        break
+
+    experiment.evaluate(ind, 20, 0.05)
+
