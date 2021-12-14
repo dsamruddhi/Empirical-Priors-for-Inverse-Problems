@@ -161,22 +161,28 @@ class PlotUtils:
             return buf
 
     @staticmethod
-    def plot_output(xg, guess):
+    def plot_output(xr, xg, guess, psnr_start, psnr_current):
         plot_extent = PlotUtils.get_doi_extent()
         plot_cmap = PlotUtils.get_cmap()
 
-        fig, (ax1, ax2) = plt.subplots(ncols=2)
+        fig, (ax3, ax1, ax2) = plt.subplots(ncols=3)
+
+        guess_real = ax3.imshow(xr[0, :, :, 0], cmap=plot_cmap, extent=plot_extent)
+        cb2 = fig.colorbar(guess_real, ax=ax3, fraction=0.046, pad=0.04)
+        cb2.ax.tick_params(labelsize=12)
+        ax3.title.set_text("original")
+        ax3.set(xticks=[-0.75, 0, 0.75], yticks=[-0.75, 0, 0.75])
 
         guess_real = ax1.imshow(xg, cmap=plot_cmap, extent=plot_extent)
         cb2 = fig.colorbar(guess_real, ax=ax1, fraction=0.046, pad=0.04)
         cb2.ax.tick_params(labelsize=12)
-        ax1.title.set_text("started with")
+        ax1.title.set_text(f"started with {psnr_start}")
         ax1.set(xticks=[-0.75, 0, 0.75], yticks=[-0.75, 0, 0.75])
 
         guess_obtained = ax2.imshow(guess[0, :, :, 0], cmap=plot_cmap, extent=plot_extent)
         cb2 = fig.colorbar(guess_obtained, ax=ax2, fraction=0.046, pad=0.04)
         cb2.ax.tick_params(labelsize=12)
-        ax2.title.set_text("Obtained output")
+        ax2.title.set_text(f"Obtained output {psnr_current}")
         ax2.set(xticks=[-0.75, 0, 0.75], yticks=[-0.75, 0, 0.75])
 
         plt.setp(ax2.get_xticklabels(), fontsize=12, horizontalalignment="left")
