@@ -213,8 +213,5 @@ if __name__ == '__main__':
         break
 
     xr, xg_start, xg = experiment.evaluate(ind, 20, 0.4)
-    print("First ended")
     xr, xg_start, xg = experiment.run_eval_loop(xr, xg_start, xg, 50, 0.1)
-    print("Second ended")
     xr, xg_start, xg = experiment.run_eval_loop(xr, xg_start, xg, 50, 0.05)
-    print("Third ended")
