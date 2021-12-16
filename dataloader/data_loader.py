@@ -45,7 +45,8 @@ class DataLoader:
 
     def main(self, show_data):
 
-        X_real, X_imag = Load.get_generated_data()
+        # X_real, X_imag = Load.get_generated_data()
+        X_imag = Load.get_generated_data()
         gen_data = np.asarray(X_imag)
 
         real_data = Load.get_real_data()

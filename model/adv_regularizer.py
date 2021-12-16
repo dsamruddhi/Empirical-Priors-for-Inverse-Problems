@@ -11,6 +11,7 @@ from config import Config
 from base_model import BaseModel
 from dataloader.data_loader import DataLoader
 from utils.plot_utils import PlotUtils
+from metric_functions.metrics import Metrics
 
 
 class AdversarialRegularizer(BaseModel, ABC):
@@ -34,7 +35,6 @@ class AdversarialRegularizer(BaseModel, ABC):
         self.mu = 0.5
 
         # Training
-        self.steps = Config.config["train"]["steps"]
         self.batch_size = Config.config["train"]["batch_size"]
 
         # Logging
@@ -85,8 +85,6 @@ class AdversarialRegularizer(BaseModel, ABC):
             conv4 = _one_cnn_layer(conv4, 512, 3, "SAME")
 
             """ Final layer """
-            # conv10 = Dense(1)(conv4)
-            # output_layer = Activation(_leaky_relu)(conv10)
             f = Flatten()(conv4)
             output_layer = tf.keras.layers.Dense(1, activation=_leaky_relu)(f)
 
@@ -115,7 +113,7 @@ class AdversarialRegularizer(BaseModel, ABC):
             penalty = tf.reduce_mean(tf.square(tf.nn.relu(norm - 1.0)))
             return penalty
 
-        train_ds = self.train_dataset.repeat(5).as_numpy_iterator()
+        train_ds = self.train_dataset.repeat(20).as_numpy_iterator()
 
         for step in tf.range(steps):
             step = tf.cast(step, tf.int64)
@@ -127,7 +125,7 @@ class AdversarialRegularizer(BaseModel, ABC):
             with tf.GradientTape() as critic_tape:
                 value_real = self.model(real_batch, training=True)
                 value_gen = self.model(gen_batch, training=True)
-                critic_loss = tf.reduce_mean(value_real - value_gen)
+                critic_loss = tf.reduce_mean(value_gen) - tf.reduce_mean(value_real)
 
                 gp = _gradient_penalty(gen_batch, real_batch)
                 total_loss = critic_loss + self.reg_lambda * gp
@@ -145,9 +143,47 @@ class AdversarialRegularizer(BaseModel, ABC):
 
     def evaluate(self, sample_index, steps, step_size):
 
+        def _difference_operator(m, num_grids, direction, sparse):
+
+            d_row = np.zeros((1, num_grids))
+            d_row[0, 0] = 1
+
+            if direction == "horizontal":
+                if sparse:
+                    d_row[0, 1] = -2
+                    d_row[0, 2] = 1
+                else:
+                    d_row[0, 1] = -1
+            elif direction == "vertical":
+                if sparse:
+                    d_row[0, m] = -2
+                    d_row[0, 2 * m] = 1
+                else:
+                    d_row[0, m] = -1
+            else:
+                raise ValueError("Invalid direction value for difference operator")
+
+            rows = list()
+            rows.append(d_row)
+            for i in range(0, num_grids - 1):
+                shifted_row = np.roll(d_row, 1)
+                shifted_row[0, 0] = 0
+                rows.append(shifted_row)
+                d_row = shifted_row
+
+            d = np.vstack([row for row in rows])
+            return d
+
+        m = 50
+        dim = self.A.shape[1]
+
+        Dx = _difference_operator(m, dim, "horizontal", sparse=True)
+        Dy = _difference_operator(m, dim, "vertical", sparse=True)
+
         for (gen_data, real_data, measurements) in self.train_dataset.take(1):
 
             xg = np.copy(gen_data[sample_index, :, :])
+            xg_start = gen_data[sample_index, :, :]
             xg = tf.convert_to_tensor(xg[np.newaxis, ..., np.newaxis])
             xr = real_data[sample_index, :, :]
             y = measurements[sample_index, :]
@@ -162,16 +198,26 @@ class AdversarialRegularizer(BaseModel, ABC):
                     data_loss = tf.reduce_mean(data_mismatch)
                     data_loss = tf.cast(data_loss, dtype=tf.float32)
 
+                    qs_loss = tf.reduce_mean(tf.square(Dx @ tf.reshape(tf.transpose(xg), shape=[2500, 1])) +
+                                             tf.square(Dy @ tf.reshape(tf.transpose(xg), shape=[2500, 1])))
+                    qs_loss = tf.cast(qs_loss, dtype=tf.float32)
+
+                    l1_loss = tf.reduce_mean(tf.abs(xg))
+                    l1_loss = tf.cast(l1_loss, dtype=tf.float32)
+
                     critic_output = tf.reduce_mean(self.model(xg))
-                    total_loss = data_loss + self.mu * critic_output
+                    total_loss = data_loss + 0.5 * critic_output + 50 * qs_loss + 30 * l1_loss
                     total_loss = tf.multiply(total_loss, self.batch_size)
 
-                    print(step, data_loss, critic_output)
+                    print(step, data_loss, critic_output, 50 * qs_loss)
 
                 eval_gradients = eval_tape.gradient(total_loss, xg)[0]
                 xg = xg - (step_size * eval_gradients)
 
-            PlotUtils.plot_output(gen_data[sample_index, :, :], xg)
+                psnr_start = Metrics.psnr(np.asarray(xr), np.asarray(xg_start))
+                psnr_current = Metrics.psnr(np.asarray(xr), np.asarray(xg[0, :, :, 0]))
+
+            PlotUtils.plot_output(xr, xg_start, xg[0, :, :, 0], psnr_start, psnr_current)
 
             break
 
@@ -192,7 +238,7 @@ if __name__ == '__main__':
     experiment.load_data(show_data=False)
     experiment.build()
     experiment.log()
-    experiment.train_regularizer(200)
+    experiment.train_regularizer(20)
 
     ind = 5
     for (gen_data, real_data, measurements) in experiment.train_dataset.take(1):
@@ -202,5 +248,5 @@ if __name__ == '__main__':
         print("gen data outputs: ", tf.reduce_mean(output1))
         break
 
-    experiment.evaluate(ind, 20, 0.05)
+    experiment.evaluate(ind, 50, 0.01)
 

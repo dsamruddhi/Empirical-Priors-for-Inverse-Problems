@@ -28,19 +28,19 @@ class PlotUtils:
         guess_real = ax3.imshow(xr, cmap=plot_cmap, extent=plot_extent)
         cb2 = fig.colorbar(guess_real, ax=ax3, fraction=0.046, pad=0.04)
         cb2.ax.tick_params(labelsize=12)
-        ax3.title.set_text("original")
+        ax3.title.set_text("Ground Truth")
         ax3.set(xticks=[-0.75, 0, 0.75], yticks=[-0.75, 0, 0.75])
 
         guess_real = ax1.imshow(xg, cmap=plot_cmap, extent=plot_extent)
         cb2 = fig.colorbar(guess_real, ax=ax1, fraction=0.046, pad=0.04)
         cb2.ax.tick_params(labelsize=12)
-        ax1.title.set_text(f"started with {psnr_start:.2f}")
+        ax1.title.set_text(f"Initial Reconstruction")
         ax1.set(xticks=[-0.75, 0, 0.75], yticks=[-0.75, 0, 0.75])
 
         guess_obtained = ax2.imshow(guess, cmap=plot_cmap, extent=plot_extent)
         cb2 = fig.colorbar(guess_obtained, ax=ax2, fraction=0.046, pad=0.04)
         cb2.ax.tick_params(labelsize=12)
-        ax2.title.set_text(f"Obtained output {psnr_current:.2f}")
+        ax2.title.set_text(f"Final Reconstruction")
         ax2.set(xticks=[-0.75, 0, 0.75], yticks=[-0.75, 0, 0.75])
 
         plt.setp(ax2.get_xticklabels(), fontsize=12, horizontalalignment="left")
