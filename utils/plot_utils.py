@@ -25,7 +25,7 @@ class PlotUtils:
 
         fig, (ax3, ax1, ax2) = plt.subplots(ncols=3)
 
-        guess_real = ax3.imshow(xr[0, :, :, 0], cmap=plot_cmap, extent=plot_extent)
+        guess_real = ax3.imshow(xr, cmap=plot_cmap, extent=plot_extent)
         cb2 = fig.colorbar(guess_real, ax=ax3, fraction=0.046, pad=0.04)
         cb2.ax.tick_params(labelsize=12)
         ax3.title.set_text("original")
@@ -37,7 +37,7 @@ class PlotUtils:
         ax1.title.set_text(f"started with {psnr_start:.2f}")
         ax1.set(xticks=[-0.75, 0, 0.75], yticks=[-0.75, 0, 0.75])
 
-        guess_obtained = ax2.imshow(guess[0, :, :, 0], cmap=plot_cmap, extent=plot_extent)
+        guess_obtained = ax2.imshow(guess, cmap=plot_cmap, extent=plot_extent)
         cb2 = fig.colorbar(guess_obtained, ax=ax2, fraction=0.046, pad=0.04)
         cb2.ax.tick_params(labelsize=12)
         ax2.title.set_text(f"Obtained output {psnr_current:.2f}")

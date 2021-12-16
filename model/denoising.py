@@ -35,6 +35,7 @@ class DenoisingRegularizer(BaseModel, ABC):
 
         self.reg_lambda = 10
         self.mu = 0.5
+        self.l1reg = 1
 
         # Training
         self.steps = Config.config["train"]["steps"]
@@ -170,8 +171,11 @@ class DenoisingRegularizer(BaseModel, ABC):
                 data_loss = tf.reduce_mean(data_mismatch)
                 data_loss = tf.cast(data_loss, dtype=tf.float32)
 
+                l1_loss = tf.reduce_mean(tf.abs(xg))
+                l1_loss = tf.cast(l1_loss, dtype=tf.float32)
+
                 critic_output = tf.reduce_mean(self.model(xg))
-                total_loss = data_loss + self.mu * critic_output
+                total_loss = data_loss + self.mu * critic_output + self.l1reg * l1_loss
                 total_loss = tf.multiply(total_loss, self.batch_size)
 
                 print(step, data_loss, critic_output)
@@ -182,7 +186,7 @@ class DenoisingRegularizer(BaseModel, ABC):
             psnr_current = Metrics.psnr(np.asarray(xr[0, :, :, 0]), np.asarray(xg[0, :, :, 0]))
             print("PSNR: ", psnr_current)
 
-        PlotUtils.plot_output(xr, xg_start, xg, psnr_start, psnr_current)
+        PlotUtils.plot_output(xr[0, :, :, 0], xg_start, xg[0, :, :, 0], psnr_start, psnr_current)
         return xr, xg_start, xg
 
 
@@ -204,7 +208,7 @@ if __name__ == '__main__':
     experiment.log()
     experiment.train_regularizer(20)
 
-    ind = 5
+    ind = 10
     for (gen_data, real_data) in experiment.train_dataset.take(1):
         output1 = experiment.model(gen_data[ind:ind+1, :, :])
         output2 = experiment.model(real_data[ind:ind+1, :, :])
@@ -212,6 +216,5 @@ if __name__ == '__main__':
         print("gen data outputs: ", tf.reduce_mean(output1))
         break
 
-    xr, xg_start, xg = experiment.evaluate(ind, 20, 0.4)
-    xr, xg_start, xg = experiment.run_eval_loop(xr, xg_start, xg, 50, 0.1)
-    xr, xg_start, xg = experiment.run_eval_loop(xr, xg_start, xg, 50, 0.05)
+    xr, xg_start, xg = experiment.evaluate(ind, 10, 0.4)
+    xr, xg_start, xg = experiment.run_eval_loop(xr, xg_start, xg, 5, 0.05)
