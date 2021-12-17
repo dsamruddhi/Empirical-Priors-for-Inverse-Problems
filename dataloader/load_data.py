@@ -29,9 +29,9 @@ class Load:
         for file in files[:num_files]:
             filename = os.path.join(Load.gen_path, file)
             guess = loadmat(filename)["guess"]
-            real_data.append(guess[0][0][0])
-            imag_data.append(guess[0][0][1])
-        return real_data, imag_data
+            # real_data.append(guess[0][0][0])
+            imag_data.append(guess[0][0][0])
+        return imag_data
 
     @staticmethod
     def get_real_data():
