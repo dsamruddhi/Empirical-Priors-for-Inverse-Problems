@@ -5,7 +5,7 @@ import tensorflow as tf
 from datetime import datetime
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, Conv2D, Activation, BatchNormalization, Input, MaxPooling2D, Flatten
+from tensorflow.keras.layers import Dense, Conv2D, Activation, BatchNormalization, Input, MaxPooling2D, Flatten, LeakyReLU
 
 from config import Config
 from base_model import BaseModel
@@ -58,7 +58,7 @@ class AdversarialRegularizer(BaseModel, ABC):
         def _one_cnn_layer(input, num_filters, kernel_size, padding):
             layer = Conv2D(num_filters, kernel_size=kernel_size, padding=padding)(input)
             layer = BatchNormalization()(layer)
-            layer = Activation(_leaky_relu)(layer)
+            layer = LeakyReLU(alpha=0.2)(layer)
             return layer
 
         def _leaky_relu(x):
@@ -86,7 +86,7 @@ class AdversarialRegularizer(BaseModel, ABC):
 
             """ Final layer """
             f = Flatten()(conv4)
-            output_layer = tf.keras.layers.Dense(1, activation=_leaky_relu)(f)
+            output_layer = tf.keras.layers.Dense(1, activation="linear")(f)
 
             model = Model(inputs=input_layer, outputs=output_layer)
             return model
@@ -128,18 +128,28 @@ class AdversarialRegularizer(BaseModel, ABC):
                 critic_loss = tf.reduce_mean(value_gen) - tf.reduce_mean(value_real)
 
                 gp = _gradient_penalty(gen_batch, real_batch)
-                total_loss = critic_loss + self.reg_lambda * gp
+                total_train_loss = critic_loss + self.reg_lambda * gp
 
-            print(step, total_loss)
-
-            network_gradients = critic_tape.gradient(total_loss, self.model.trainable_variables)
+            network_gradients = critic_tape.gradient(total_train_loss, self.model.trainable_variables)
             self.optimizer.apply_gradients(zip(network_gradients, self.model.trainable_variables))
+
+            total_val_loss = []
+            for (gen_data, real_data, _) in self.test_dataset.take(1):
+                value_real = self.model(real_data, training=True)
+                value_gen = self.model(gen_data, training=True)
+                val_loss = tf.reduce_mean(value_gen) - tf.reduce_mean(value_real)
+                total_val_loss.append(val_loss)
+
+            avg_val_loss = tf.reduce_mean(total_val_loss)
+
+            tf.print(step, total_train_loss, avg_val_loss)
 
             with self.summary_writer.as_default():
                 tf.summary.scalar('critic_loss', critic_loss, step=step)
                 tf.summary.scalar('gradient_penalty', gp, step=step)
                 tf.summary.scalar('reg_parameter', self.reg_lambda, step=step)
-                tf.summary.scalar('total_loss', total_loss, step=step)
+                tf.summary.scalar('total_train_loss', total_train_loss, step=step)
+                tf.summary.scalar('avg_val_loss', avg_val_loss, step=step)
 
     def evaluate(self, sample_index, steps, step_size):
 
@@ -206,10 +216,11 @@ class AdversarialRegularizer(BaseModel, ABC):
                     l1_loss = tf.cast(l1_loss, dtype=tf.float32)
 
                     critic_output = tf.reduce_mean(self.model(xg))
-                    total_loss = data_loss + 0.5 * critic_output + 50 * qs_loss + 30 * l1_loss
+
+                    total_loss = data_loss + 0.5 * critic_output + 8 * qs_loss + 30 * l1_loss
                     total_loss = tf.multiply(total_loss, self.batch_size)
 
-                    print(step, data_loss, critic_output, 50 * qs_loss)
+                    print(step, data_loss, critic_output)
 
                 eval_gradients = eval_tape.gradient(total_loss, xg)[0]
                 xg = xg - (step_size * eval_gradients)
@@ -238,9 +249,9 @@ if __name__ == '__main__':
     experiment.load_data(show_data=False)
     experiment.build()
     experiment.log()
-    experiment.train_regularizer(20)
+    experiment.train_regularizer(30)
 
-    ind = 5
+    ind = 14
     for (gen_data, real_data, measurements) in experiment.train_dataset.take(1):
         output1 = experiment.model(gen_data[ind:ind+1, :, :])
         output2 = experiment.model(real_data[ind:ind+1, :, :])
@@ -248,5 +259,5 @@ if __name__ == '__main__':
         print("gen data outputs: ", tf.reduce_mean(output1))
         break
 
-    experiment.evaluate(ind, 50, 0.01)
+    experiment.evaluate(ind, 20, 0.01)
 
